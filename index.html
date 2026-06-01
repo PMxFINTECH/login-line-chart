@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Login Performance Dashboard</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+  <style>
+    body {
+      font-family: sans-serif;
+      background: #ffffff;
+      color: #1a1a1a;
+      padding: 24px;
+      max-width: 780px;
+      margin: 0 auto;
+    }
+    .metric-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+    .metric-card {
+      background: #f5f5f3;
+      border-radius: 8px;
+      padding: 16px;
+    }
+    .metric-card .label { font-size: 13px; color: #888; margin: 0 0 4px; }
+    .metric-card .value { font-size: 22px; font-weight: 500; margin: 0; }
+    .metric-card .sub   { font-size: 12px; color: #888; margin: 4px 0 0; }
+    .section-label {
+      font-size: 13px;
+      font-weight: 500;
+      color: #888;
+      margin: 32px 0 8px;
+    }
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 14px;
+      margin-bottom: 10px;
+      font-size: 12px;
+      color: #555;
+    }
+    .legend span { display: flex; align-items: center; gap: 5px; }
+    .swatch      { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+    .line-swatch { width: 18px; height: 3px;  border-radius: 2px; display: inline-block; }
+    .chart-wrap  { position: relative; width: 100%; }
+  </style>
+</head>
+<body>
+
+  <!-- Metric cards -->
+  <div class="metric-grid">
+    <div class="metric-card">
+      <p class="label">Revolut median</p>
+      <p class="value" id="rev-median">—</p>
+      <p class="sub">Range: <span id="rev-range">—</span></p>
+    </div>
+    <div class="metric-card">
+      <p class="label">Wise median</p>
+      <p class="value" id="wise-median">—</p>
+      <p class="sub">Range: <span id="wise-range">—</span></p>
+    </div>
+    <div class="metric-card">
+      <p class="label">PayPal median</p>
+      <p class="value" id="pp-median">—</p>
+      <p class="sub">Range: <span id="pp-range">—</span></p>
+    </div>
+  </div>
+
+  <!-- Bar chart -->
+  <p class="section-label">Best · average · worst per app</p>
+  <div class="legend">
+    <span><span class="swatch" style="background:#1D9E75;"></span>Best</span>
+    <span><span class="swatch" style="background:#7F77DD;"></span>Average</span>
+    <span><span class="swatch" style="background:#D85A30;"></span>Worst</span>
+  </div>
+  <div class="chart-wrap" style="height: 260px;">
+    <canvas id="barChart"></canvas>
+  </div>
+
+  <!-- Line chart -->
+  <p class="section-label">All 10 recorded login attempts + median</p>
+  <div class="legend">
+    <span><span class="line-swatch" style="background:#7F77DD;"></span>Revolut</span>
+    <span><span class="line-swatch" style="background:#1D9E75;"></span>Wise</span>
+    <span><span class="line-swatch" style="background:#D85A30;"></span>PayPal</span>
+    <span style="opacity:0.6;"><span class="line-swatch" style="background:#888; border-top: 2px dashed #888; height:0;"></span>Median</span>
+  </div>
+  <div class="chart-wrap" style="height: 320px;">
+    <canvas id="lineChart"></canvas>
+  </div>
+
+  <script>
+    const revolut = [6.4, 6.2, 5.38, 5.48, 5.33, 5.10, 4.97, 5.0, 4.88, 4.88];
+    const wise    = [5.3, 4.3, 4.73, 3.87, 3.77, 3.67, 3.9,  3.9, 3.69, 3.91];
+    const paypal  = [8.23, 6.85, 6.39, 6.71, 6.35, 6.55, 6.37, 6.24, 6.44, 6.28];
+
+    function median(arr) {
+      const s = [...arr].sort((a, b) => a - b);
+      const m = Math.floor(s.length / 2);
+      return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+    }
+    function avg(arr) {
+      return arr.reduce((a, b) => a + b, 0) / arr.length;
+    }
+
+    const revMed  = median(revolut);
+    const wiseMed = median(wise);
+    const ppMed   = median(paypal);
+
+    document.getElementById('rev-median').textContent  = revMed.toFixed(2)  + 's';
+    document.getElementById('wise-median').textContent = wiseMed.toFixed(2) + 's';
+    document.getElementById('pp-median').textContent   = ppMed.toFixed(2)   + 's';
+    document.getElementById('rev-range').textContent   = Math.min(...revolut).toFixed(2) + 's – ' + Math.max(...revolut).toFixed(2) + 's';
+    document.getElementById('wise-range').textContent  = Math.min(...wise).toFixed(2)    + 's – ' + Math.max(...wise).toFixed(2)    + 's';
+    document.getElementById('pp-range').textContent    = Math.min(...paypal).toFixed(2)  + 's – ' + Math.max(...paypal).toFixed(2)  + 's';
+
+    /* ── Bar chart ── */
+    new Chart(document.getElementById('barChart'), {
+      type: 'bar',
+      data: {
+        labels: ['Revolut', 'Wise', 'PayPal'],
+        datasets: [
+          {
+            label: 'Best',
+            data: [Math.min(...revolut), Math.min(...wise), Math.min(...paypal)],
+            backgroundColor: '#1D9E75',
+            borderRadius: 4
+          },
+          {
+            label: 'Average',
+            data: [+avg(revolut).toFixed(2), +avg(wise).toFixed(2), +avg(paypal).toFixed(2)],
+            backgroundColor: '#7F77DD',
+            borderRadius: 4
+          },
+          {
+            label: 'Worst',
+            data: [Math.max(...revolut), Math.max(...wise), Math.max(...paypal)],
+            backgroundColor: '#D85A30',
+            borderRadius: 4
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: ctx => ctx.dataset.label + ': ' + ctx.parsed.y.toFixed(2) + 's'
+            }
+          }
+        },
+        scales: {
+          y: {
+            min: 2,
+            max: 9,
+            ticks: { callback: v => v + 's' },
+            grid: { color: 'rgba(0,0,0,0.06)' }
+          },
+          x: { grid: { display: false } }
+        }
+      }
+    });
+
+    /* ── Line chart ── */
+    function medianLine(val, color) {
+      return {
+        label: '',
+        data: Array(10).fill(val),
+        borderColor: color,
+        borderWidth: 1.5,
+        borderDash: [6, 4],
+        pointRadius: 0,
+        pointHoverRadius: 0,
+        tension: 0,
+        fill: false
+      };
+    }
+
+    new Chart(document.getElementById('lineChart'), {
+      type: 'line',
+      data: {
+        labels: ['T1','T2','T3','T4','T5','T6','T7','T8','T9','T10'],
+        datasets: [
+          {
+            label: 'Revolut',
+            data: revolut,
+            borderColor: '#7F77DD',
+            backgroundColor: 'rgba(127,119,221,0.08)',
+            fill: true,
+            tension: 0.3,
+            pointRadius: 4,
+            pointBackgroundColor: '#7F77DD',
+            borderWidth: 2
+          },
+          {
+            label: 'Wise',
+            data: wise,
+            borderColor: '#1D9E75',
+            backgroundColor: 'rgba(29,158,117,0.08)',
+            fill: true,
+            tension: 0.3,
+            pointRadius: 4,
+            pointBackgroundColor: '#1D9E75',
+            borderWidth: 2
+          },
+          {
+            label: 'PayPal',
+            data: paypal,
+            borderColor: '#D85A30',
+            backgroundColor: 'rgba(216,90,48,0.08)',
+            fill: true,
+            tension: 0.3,
+            pointRadius: 4,
+            pointBackgroundColor: '#D85A30',
+            borderWidth: 2
+          },
+          medianLine(revMed,  '#7F77DD'),
+          medianLine(wiseMed, '#1D9E75'),
+          medianLine(ppMed,   '#D85A30')
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            filter: item => item.dataset.label !== '',
+            callbacks: {
+              label: ctx => ctx.dataset.label + ': ' + ctx.parsed.y.toFixed(2) + 's'
+            }
+          }
+        },
+        scales: {
+          y: {
+            min: 2.5,
+            max: 9,
+            ticks: { callback: v => v + 's' },
+            grid: { color: 'rgba(0,0,0,0.06)' }
+          },
+          x: {
+            grid: { display: false },
+            ticks: { autoSkip: false }
+          }
+        }
+      }
+    });
+  </script>
+
+</body>
+</html>
