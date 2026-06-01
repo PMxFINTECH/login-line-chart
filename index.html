@@ -4,7 +4,6 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Login Performance Line Chart</title>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
   <style>
     body {
       font-family: sans-serif;
@@ -44,6 +43,7 @@
     }
     .legend span { display: flex; align-items: center; gap: 5px; }
     .line-swatch { width: 18px; height: 3px; border-radius: 2px; display: inline-block; }
+    canvas { display: block; }
   </style>
 </head>
 <body>
@@ -71,16 +71,118 @@
     <span><span class="line-swatch" style="background:#7F77DD;"></span>Revolut</span>
     <span><span class="line-swatch" style="background:#1D9E75;"></span>Wise</span>
     <span><span class="line-swatch" style="background:#D85A30;"></span>PayPal</span>
-    <span style="opacity:0.6;"><span class="line-swatch" style="background:#888; border-top: 2px dashed #888; height:0;"></span>Median</span>
+    <span style="opacity:0.6;"><span class="line-swatch" style="background:#888;"></span>Median</span>
   </div>
-  <div style="position: relative; width: 100%; height: 360px;">
-    <canvas id="lineChart"></canvas>
-  </div>
+
+  <canvas id="lineChart" width="780" height="400"></canvas>
 
   <script>
     const revolut = [6.4, 6.2, 5.38, 5.48, 5.33, 5.10, 4.97, 5.0, 4.88, 4.88];
     const wise    = [5.3, 4.3, 4.73, 3.87, 3.77, 3.67, 3.9,  3.9, 3.69, 3.91];
     const paypal  = [8.23, 6.85, 6.39, 6.71, 6.35, 6.55, 6.37, 6.24, 6.44, 6.28];
+    const labels  = ['T1','T2','T3','T4','T5','T6','T7','T8','T9','T10'];
 
     function median(arr) {
-      const s = [...arr].sort((a, b) => a -
+      const s = [...arr].sort((a, b) => a - b);
+      const m = Math.floor(s.length / 2);
+      return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+    }
+
+    const revMed  = median(revolut);
+    const wiseMed = median(wise);
+    const ppMed   = median(paypal);
+
+    document.getElementById('rev-median').textContent  = revMed.toFixed(2)  + 's';
+    document.getElementById('wise-median').textContent = wiseMed.toFixed(2) + 's';
+    document.getElementById('pp-median').textContent   = ppMed.toFixed(2)   + 's';
+    document.getElementById('rev-range').textContent   = Math.min(...revolut).toFixed(2) + 's – ' + Math.max(...revolut).toFixed(2) + 's';
+    document.getElementById('wise-range').textContent  = Math.min(...wise).toFixed(2)    + 's – ' + Math.max(...wise).toFixed(2)    + 's';
+    document.getElementById('pp-range').textContent    = Math.min(...paypal).toFixed(2)  + 's – ' + Math.max(...paypal).toFixed(2)  + 's';
+
+    const canvas = document.getElementById('lineChart');
+    const ctx = canvas.getContext('2d');
+
+    const W = canvas.width;
+    const H = canvas.height;
+    const padL = 52, padR = 20, padT = 20, padB = 40;
+    const chartW = W - padL - padR;
+    const chartH = H - padT - padB;
+    const minY = 2.5, maxY = 9.0;
+    const n = labels.length;
+
+    function xPos(i) { return padL + (i / (n - 1)) * chartW; }
+    function yPos(v) { return padT + chartH - ((v - minY) / (maxY - minY)) * chartH; }
+
+    function drawGrid() {
+      ctx.strokeStyle = 'rgba(0,0,0,0.06)';
+      ctx.lineWidth = 1;
+      const ticks = [3, 4, 5, 6, 7, 8, 9];
+      ticks.forEach(t => {
+        const y = yPos(t);
+        ctx.beginPath();
+        ctx.moveTo(padL, y);
+        ctx.lineTo(W - padR, y);
+        ctx.stroke();
+        ctx.fillStyle = '#888';
+        ctx.font = '11px sans-serif';
+        ctx.textAlign = 'right';
+        ctx.fillText(t + 's', padL - 6, y + 4);
+      });
+      labels.forEach((lbl, i) => {
+        const x = xPos(i);
+        ctx.fillStyle = '#888';
+        ctx.font = '11px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(lbl, x, H - 10);
+      });
+    }
+
+    function drawFilledLine(data, color) {
+      ctx.beginPath();
+      data.forEach((v, i) => {
+        const x = xPos(i), y = yPos(v);
+        i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+      });
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      ctx.lineTo(xPos(n - 1), yPos(minY));
+      ctx.lineTo(xPos(0), yPos(minY));
+      ctx.closePath();
+      const fill = ctx.createLinearGradient(0, padT, 0, padT + chartH);
+      fill.addColorStop(0, color + '22');
+      fill.addColorStop(1, color + '05');
+      ctx.fillStyle = fill;
+      ctx.fill();
+
+      data.forEach((v, i) => {
+        ctx.beginPath();
+        ctx.arc(xPos(i), yPos(v), 4, 0, Math.PI * 2);
+        ctx.fillStyle = color;
+        ctx.fill();
+      });
+    }
+
+    function drawMedian(val, color) {
+      ctx.beginPath();
+      ctx.setLineDash([6, 4]);
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1.5;
+      ctx.moveTo(padL, yPos(val));
+      ctx.lineTo(W - padR, yPos(val));
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    drawGrid();
+    drawFilledLine(revolut, '#7F77DD');
+    drawFilledLine(wise,    '#1D9E75');
+    drawFilledLine(paypal,  '#D85A30');
+    drawMedian(revMed,  '#7F77DD');
+    drawMedian(wiseMed, '#1D9E75');
+    drawMedian(ppMed,   '#D85A30');
+  </script>
+
+</body>
+</html>
