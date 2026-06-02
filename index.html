@@ -43,6 +43,7 @@
     }
     .legend span { display: flex; align-items: center; gap: 5px; }
     .line-swatch { width: 18px; height: 3px; border-radius: 2px; display: inline-block; }
+    canvas { display: block; }
   </style>
 </head>
 <body>
@@ -73,15 +74,13 @@
     <span style="opacity:0.6;"><span class="line-swatch" style="background:#888;"></span>Median</span>
   </div>
 
-  <div style="position: relative; width: 100%; height: 380px;">
-    <canvas id="lineChart"></canvas>
-  </div>
+  <canvas id="lineChart"></canvas>
 
-<script src="https://unpkg.com/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-<script>
+  <script>
     const revolut = [6.4, 6.2, 5.38, 5.48, 5.33, 5.10, 4.97, 5.0, 4.88, 4.88];
     const wise    = [5.3, 4.3, 4.73, 3.87, 3.77, 3.67, 3.9,  3.9, 3.69, 3.91];
     const paypal  = [8.23, 6.85, 6.39, 6.71, 6.35, 6.55, 6.37, 6.24, 6.44, 6.28];
+    const labels  = ['T1','T2','T3','T4','T5','T6','T7','T8','T9','T10'];
 
     function median(arr) {
       const s = [...arr].sort((a, b) => a - b);
@@ -100,99 +99,97 @@
     document.getElementById('wise-range').textContent  = Math.min(...wise).toFixed(2)    + 's – ' + Math.max(...wise).toFixed(2)    + 's';
     document.getElementById('pp-range').textContent    = Math.min(...paypal).toFixed(2)  + 's – ' + Math.max(...paypal).toFixed(2)  + 's';
 
-    function medianLine(val, color) {
-      return {
-        label: '',
-        data: Array(10).fill(val),
-        borderColor: color,
-        borderWidth: 1.5,
-        borderDash: [6, 4],
-        pointRadius: 0,
-        pointHoverRadius: 0,
-        tension: 0,
-        fill: false
-      };
+    // --- DPI-aware canvas setup (fixes blank chart on high-res screens) ---
+    const canvas = document.getElementById('lineChart');
+    const ctx = canvas.getContext('2d');
+    const dpr = window.devicePixelRatio || 1;
+
+    const W = 780, H = 400;
+    canvas.width  = W * dpr;
+    canvas.height = H * dpr;
+    canvas.style.width  = W + 'px';
+    canvas.style.height = H + 'px';
+    ctx.scale(dpr, dpr);
+    // ---------------------------------------------------------------------
+
+    const padL = 52, padR = 20, padT = 20, padB = 40;
+    const chartW = W - padL - padR;
+    const chartH = H - padT - padB;
+    const minY = 2.5, maxY = 9.0;
+    const n = labels.length;
+
+    function xPos(i) { return padL + (i / (n - 1)) * chartW; }
+    function yPos(v) { return padT + chartH - ((v - minY) / (maxY - minY)) * chartH; }
+
+    function drawGrid() {
+      ctx.strokeStyle = 'rgba(0,0,0,0.06)';
+      ctx.lineWidth = 1;
+      const ticks = [3, 4, 5, 6, 7, 8, 9];
+      ticks.forEach(t => {
+        const y = yPos(t);
+        ctx.beginPath();
+        ctx.moveTo(padL, y);
+        ctx.lineTo(W - padR, y);
+        ctx.stroke();
+        ctx.fillStyle = '#888';
+        ctx.font = '11px sans-serif';
+        ctx.textAlign = 'right';
+        ctx.fillText(t + 's', padL - 6, y + 4);
+      });
+      labels.forEach((lbl, i) => {
+        const x = xPos(i);
+        ctx.fillStyle = '#888';
+        ctx.font = '11px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(lbl, x, H - 10);
+      });
     }
 
-    new Chart(document.getElementById('lineChart'), {
-      type: 'line',
-      data: {
-        labels: ['T1','T2','T3','T4','T5','T6','T7','T8','T9','T10'],
-        datasets: [
-          {
-            label: 'Revolut',
-            data: revolut,
-            borderColor: '#7F77DD',
-            backgroundColor: 'rgba(127,119,221,0.08)',
-            fill: true,
-            tension: 0.3,
-            pointRadius: 5,
-            pointHoverRadius: 8,
-            pointBackgroundColor: '#7F77DD',
-            pointHoverBackgroundColor: '#7F77DD',
-            borderWidth: 2
-          },
-          {
-            label: 'Wise',
-            data: wise,
-            borderColor: '#1D9E75',
-            backgroundColor: 'rgba(29,158,117,0.08)',
-            fill: true,
-            tension: 0.3,
-            pointRadius: 5,
-            pointHoverRadius: 8,
-            pointBackgroundColor: '#1D9E75',
-            pointHoverBackgroundColor: '#1D9E75',
-            borderWidth: 2
-          },
-          {
-            label: 'PayPal',
-            data: paypal,
-            borderColor: '#D85A30',
-            backgroundColor: 'rgba(216,90,48,0.08)',
-            fill: true,
-            tension: 0.3,
-            pointRadius: 5,
-            pointHoverRadius: 8,
-            pointBackgroundColor: '#D85A30',
-            pointHoverBackgroundColor: '#D85A30',
-            borderWidth: 2
-          },
-          medianLine(revMed,  '#7F77DD'),
-          medianLine(wiseMed, '#1D9E75'),
-          medianLine(ppMed,   '#D85A30')
-        ]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        interaction: {
-          mode: 'index',
-          intersect: false
-        },
-        plugins: {
-          legend: { display: false },
-          tooltip: {
-            filter: item => item.dataset.label !== '',
-            callbacks: {
-              label: ctx => ' ' + ctx.dataset.label + ': ' + ctx.parsed.y.toFixed(2) + 's'
-            }
-          }
-        },
-        scales: {
-          y: {
-            min: 2.5,
-            max: 9,
-            ticks: { callback: v => v + 's' },
-            grid: { color: 'rgba(0,0,0,0.06)' }
-          },
-          x: {
-            grid: { display: false },
-            ticks: { autoSkip: false }
-          }
-        }
-      }
-    });
+    function drawFilledLine(data, color) {
+      ctx.beginPath();
+      data.forEach((v, i) => {
+        const x = xPos(i), y = yPos(v);
+        i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+      });
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      ctx.lineTo(xPos(n - 1), yPos(minY));
+      ctx.lineTo(xPos(0), yPos(minY));
+      ctx.closePath();
+      const fill = ctx.createLinearGradient(0, padT, 0, padT + chartH);
+      fill.addColorStop(0, color + '22');
+      fill.addColorStop(1, color + '05');
+      ctx.fillStyle = fill;
+      ctx.fill();
+
+      data.forEach((v, i) => {
+        ctx.beginPath();
+        ctx.arc(xPos(i), yPos(v), 4, 0, Math.PI * 2);
+        ctx.fillStyle = color;
+        ctx.fill();
+      });
+    }
+
+    function drawMedian(val, color) {
+      ctx.beginPath();
+      ctx.setLineDash([6, 4]);
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1.5;
+      ctx.moveTo(padL, yPos(val));
+      ctx.lineTo(W - padR, yPos(val));
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    drawGrid();
+    drawFilledLine(revolut, '#7F77DD');
+    drawFilledLine(wise,    '#1D9E75');
+    drawFilledLine(paypal,  '#D85A30');
+    drawMedian(revMed,  '#7F77DD');
+    drawMedian(wiseMed, '#1D9E75');
+    drawMedian(ppMed,   '#D85A30');
   </script>
 
 </body>
