@@ -43,7 +43,35 @@
     }
     .legend span { display: flex; align-items: center; gap: 5px; }
     .line-swatch { width: 18px; height: 3px; border-radius: 2px; display: inline-block; }
-    canvas { display: block; }
+
+    .chart-wrapper {
+      position: relative;
+      display: inline-block;
+    }
+    canvas { display: block; cursor: crosshair; }
+
+    #tooltip {
+      position: absolute;
+      background: #1a1a1a;
+      color: #fff;
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 12px;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.15s ease;
+      white-space: nowrap;
+      z-index: 10;
+      line-height: 1.8;
+    }
+    #tooltip.visible { opacity: 1; }
+    #tooltip .tt-title {
+      font-size: 11px;
+      color: #aaa;
+      margin-bottom: 4px;
+    }
+    #tooltip .tt-row { display: flex; align-items: center; gap: 8px; }
+    #tooltip .tt-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
   </style>
 </head>
 <body>
@@ -74,13 +102,22 @@
     <span style="opacity:0.6;"><span class="line-swatch" style="background:#888;"></span>Median</span>
   </div>
 
-  <canvas id="lineChart"></canvas>
+  <div class="chart-wrapper">
+    <canvas id="lineChart"></canvas>
+    <div id="tooltip"></div>
+  </div>
 
   <script>
     const revolut = [6.4, 6.2, 5.38, 5.48, 5.33, 5.10, 4.97, 5.0, 4.88, 4.88];
     const wise    = [5.3, 4.3, 4.73, 3.87, 3.77, 3.67, 3.9,  3.9, 3.69, 3.91];
     const paypal  = [8.23, 6.85, 6.39, 6.71, 6.35, 6.55, 6.37, 6.24, 6.44, 6.28];
     const labels  = ['T1','T2','T3','T4','T5','T6','T7','T8','T9','T10'];
+
+    const series = [
+      { name: 'Revolut', data: revolut, color: '#7F77DD' },
+      { name: 'Wise',    data: wise,    color: '#1D9E75' },
+      { name: 'PayPal',  data: paypal,  color: '#D85A30' },
+    ];
 
     function median(arr) {
       const s = [...arr].sort((a, b) => a - b);
@@ -99,7 +136,7 @@
     document.getElementById('wise-range').textContent  = Math.min(...wise).toFixed(2)    + 's – ' + Math.max(...wise).toFixed(2)    + 's';
     document.getElementById('pp-range').textContent    = Math.min(...paypal).toFixed(2)  + 's – ' + Math.max(...paypal).toFixed(2)  + 's';
 
-    // --- DPI-aware canvas setup (fixes blank chart on high-res screens) ---
+    // --- DPI-aware canvas setup ---
     const canvas = document.getElementById('lineChart');
     const ctx = canvas.getContext('2d');
     const dpr = window.devicePixelRatio || 1;
@@ -110,7 +147,7 @@
     canvas.style.width  = W + 'px';
     canvas.style.height = H + 'px';
     ctx.scale(dpr, dpr);
-    // ---------------------------------------------------------------------
+    // ------------------------------
 
     const padL = 52, padR = 20, padT = 20, padB = 40;
     const chartW = W - padL - padR;
@@ -145,7 +182,7 @@
       });
     }
 
-    function drawFilledLine(data, color) {
+    function drawFilledLine(data, color, highlightIndex) {
       ctx.beginPath();
       data.forEach((v, i) => {
         const x = xPos(i), y = yPos(v);
@@ -165,10 +202,16 @@
       ctx.fill();
 
       data.forEach((v, i) => {
+        const isHighlighted = i === highlightIndex;
         ctx.beginPath();
-        ctx.arc(xPos(i), yPos(v), 4, 0, Math.PI * 2);
+        ctx.arc(xPos(i), yPos(v), isHighlighted ? 6 : 4, 0, Math.PI * 2);
         ctx.fillStyle = color;
         ctx.fill();
+        if (isHighlighted) {
+          ctx.strokeStyle = '#fff';
+          ctx.lineWidth = 2;
+          ctx.stroke();
+        }
       });
     }
 
@@ -183,13 +226,78 @@
       ctx.setLineDash([]);
     }
 
-    drawGrid();
-    drawFilledLine(revolut, '#7F77DD');
-    drawFilledLine(wise,    '#1D9E75');
-    drawFilledLine(paypal,  '#D85A30');
-    drawMedian(revMed,  '#7F77DD');
-    drawMedian(wiseMed, '#1D9E75');
-    drawMedian(ppMed,   '#D85A30');
+    function drawVerticalLine(x) {
+      ctx.beginPath();
+      ctx.setLineDash([4, 3]);
+      ctx.strokeStyle = 'rgba(0,0,0,0.15)';
+      ctx.lineWidth = 1;
+      ctx.moveTo(x, padT);
+      ctx.lineTo(x, padT + chartH);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    function render(highlightIndex = -1) {
+      ctx.clearRect(0, 0, W, H);
+      drawGrid();
+      if (highlightIndex >= 0) drawVerticalLine(xPos(highlightIndex));
+      series.forEach(s => drawFilledLine(s.data, s.color, highlightIndex));
+      drawMedian(revMed,  '#7F77DD');
+      drawMedian(wiseMed, '#1D9E75');
+      drawMedian(ppMed,   '#D85A30');
+    }
+
+    render();
+
+    // --- Tooltip logic ---
+    const tooltip = document.getElementById('tooltip');
+    const HIT_RADIUS = 30; // px proximity to snap to a column
+
+    canvas.addEventListener('mousemove', (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+
+      // Find nearest column index
+      let closestIdx = -1;
+      let closestDist = Infinity;
+      for (let i = 0; i < n; i++) {
+        const dist = Math.abs(mouseX - xPos(i));
+        if (dist < closestDist) { closestDist = dist; closestIdx = i; }
+      }
+
+      if (closestDist > HIT_RADIUS) {
+        tooltip.classList.remove('visible');
+        render();
+        return;
+      }
+
+      render(closestIdx);
+
+      // Build tooltip content
+      const label = labels[closestIdx];
+      let html = `<div class="tt-title">${label}</div>`;
+      series.forEach(s => {
+        html += `<div class="tt-row">
+          <span class="tt-dot" style="background:${s.color}"></span>
+          <span>${s.name}</span>
+          <span style="margin-left:auto; padding-left:16px; font-weight:500;">${s.data[closestIdx].toFixed(2)}s</span>
+        </div>`;
+      });
+      tooltip.innerHTML = html;
+
+      // Position tooltip: flip left if near right edge
+      const txRaw = xPos(closestIdx) + 14;
+      const tooltipW = 160;
+      const tx = (txRaw + tooltipW > W) ? xPos(closestIdx) - tooltipW - 14 : txRaw;
+      tooltip.style.left = tx + 'px';
+      tooltip.style.top  = (padT + 10) + 'px';
+      tooltip.classList.add('visible');
+    });
+
+    canvas.addEventListener('mouseleave', () => {
+      tooltip.classList.remove('visible');
+      render();
+    });
   </script>
 
 </body>
