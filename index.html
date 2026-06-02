@@ -96,9 +96,9 @@
 
   <p class="section-label">All 10 recorded login attempts + median</p>
   <div class="legend">
-    <span><span class="line-swatch" style="background:#7F77DD;"></span>Revolut</span>
-    <span><span class="line-swatch" style="background:#1D9E75;"></span>Wise</span>
-    <span><span class="line-swatch" style="background:#D85A30;"></span>PayPal</span>
+    <span><span class="line-swatch" style="background:#4F55F1;"></span>Revolut</span>
+    <span><span class="line-swatch" style="background:#4CAF00;"></span>Wise</span>
+    <span><span class="line-swatch" style="background:#003087;"></span>PayPal</span>
     <span style="opacity:0.6;"><span class="line-swatch" style="background:#888;"></span>Median</span>
   </div>
 
@@ -113,10 +113,14 @@
     const paypal  = [8.23, 6.85, 6.39, 6.71, 6.35, 6.55, 6.37, 6.24, 6.44, 6.28];
     const labels  = ['T1','T2','T3','T4','T5','T6','T7','T8','T9','T10'];
 
+    // Official brand colors
+    // Revolut: #4F55F1 (Royal Blue — brandfetch.com/revolut.com)
+    // Wise:    #4CAF00 (darkened from brand #9FE870 for readability on white)
+    // PayPal:  #003087 (Dark Blue — official PayPal brand guidelines)
     const series = [
-      { name: 'Revolut', data: revolut, color: '#7F77DD' },
-      { name: 'Wise',    data: wise,    color: '#1D9E75' },
-      { name: 'PayPal',  data: paypal,  color: '#D85A30' },
+      { name: 'Revolut', data: revolut, color: '#4F55F1' },
+      { name: 'Wise',    data: wise,    color: '#4CAF00' },
+      { name: 'PayPal',  data: paypal,  color: '#003087' },
     ];
 
     function median(arr) {
@@ -242,22 +246,21 @@
       drawGrid();
       if (highlightIndex >= 0) drawVerticalLine(xPos(highlightIndex));
       series.forEach(s => drawFilledLine(s.data, s.color, highlightIndex));
-      drawMedian(revMed,  '#7F77DD');
-      drawMedian(wiseMed, '#1D9E75');
-      drawMedian(ppMed,   '#D85A30');
+      drawMedian(revMed,  '#4F55F1');
+      drawMedian(wiseMed, '#4CAF00');
+      drawMedian(ppMed,   '#003087');
     }
 
     render();
 
     // --- Tooltip logic ---
     const tooltip = document.getElementById('tooltip');
-    const HIT_RADIUS = 30; // px proximity to snap to a column
+    const HIT_RADIUS = 30;
 
     canvas.addEventListener('mousemove', (e) => {
       const rect = canvas.getBoundingClientRect();
       const mouseX = e.clientX - rect.left;
 
-      // Find nearest column index
       let closestIdx = -1;
       let closestDist = Infinity;
       for (let i = 0; i < n; i++) {
@@ -273,7 +276,6 @@
 
       render(closestIdx);
 
-      // Build tooltip content
       const label = labels[closestIdx];
       let html = `<div class="tt-title">${label}</div>`;
       series.forEach(s => {
@@ -285,7 +287,6 @@
       });
       tooltip.innerHTML = html;
 
-      // Position tooltip: flip left if near right edge
       const txRaw = xPos(closestIdx) + 14;
       const tooltipW = 160;
       const tx = (txRaw + tooltipW > W) ? xPos(closestIdx) - tooltipW - 14 : txRaw;
